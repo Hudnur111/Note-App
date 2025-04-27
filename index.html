@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notizen-App</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- FontAwesome für Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
+
+  <!-- Schriftart -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen flex flex-col">
+
+  <!-- Kopfzeile -->
+  <header class="bg-white shadow-md">
+    <div class="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+      <h1 class="text-2xl font-semibold text-gray-800">Notizen-App</h1>
+      <button id="addNoteBtn" class="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Neue Notiz hinzufügen">
+        <i class="fas fa-plus mr-2"></i> Neue Notiz
+      </button>
+    </div>
+  </header>
+
+  <!-- Hauptbereich -->
+  <main class="flex-grow max-w-4xl mx-auto px-4 py-6 w-full">
+    <section id="notesContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+      <!-- Hier erscheinen die Notizen -->
+    </section>
+  </main>
+
+  <!-- Modal-Fenster für neue oder bearbeitete Notizen -->
+  <div id="noteModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden" role="dialog" aria-modal="true">
+    <div class="bg-white rounded-lg shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto flex flex-col">
+
+      <!-- Modal Kopfzeile -->
+      <header class="flex justify-between items-center border-b border-gray-200 px-6 py-4">
+        <h2 id="modalTitle" class="text-xl font-semibold text-gray-800">Neue Notiz</h2>
+        <button id="closeModalBtn" class="text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded" aria-label="Modal schließen">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </header>
+
+      <!-- Formular -->
+      <form id="noteForm" class="flex flex-col px-6 py-4 space-y-4">
+        <div>
+          <label for="noteTitle" class="font-medium text-gray-700">Titel</label>
+          <input type="text" id="noteTitle" name="noteTitle" class="border border-gray-300 rounded-md px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Titel eingeben" required />
+        </div>
+        <div>
+          <label for="noteContent" class="font-medium text-gray-700">Inhalt</label>
+          <textarea id="noteContent" name="noteContent" rows="6" class="border border-gray-300 rounded-md px-3 py-2 w-full resize-y focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Schreibe deine Notiz..." required></textarea>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" id="cancelBtn" class="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            Abbrechen
+          </button>
+          <button type="submit" class="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            Speichern
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- JavaScript Bereich -->
+  <script>
+    const addNoteBtn = document.getElementById('addNoteBtn');
+    const noteModal = document.getElementById('noteModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const noteForm = document.getElementById('noteForm');
+    const notesContainer = document.getElementById('notesContainer');
+
+    let notes = JSON.parse(localStorage.getItem('notes')) || [];
+    let editingIndex = null;
+
+    function speichern() {
+      localStorage.setItem('notes', JSON.stringify(notes));
+    }
+
+    function erzeugeNotizElement(note, index) {
+      const noteEl = document.createElement('article');
+      noteEl.className = 'bg-white rounded-lg shadow p-4 flex flex-col justify-between h-full';
+
+      const titleEl = document.createElement('h3');
+      titleEl.className = 'text-lg font-semibold text-gray-800 mb-2 break-words';
+      titleEl.textContent = note.title;
+
+      const contentEl = document.createElement('p');
+      contentEl.className = 'text-gray-700 whitespace-pre-wrap flex-grow break-words';
+      contentEl.textContent = note.content;
+
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'mt-4 flex justify-end space-x-3';
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'text-blue-600 hover:text-blue-800 focus:outline-none';
+      editBtn.setAttribute('aria-label', `Notiz "${note.title}" bearbeiten`);
+      editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+      editBtn.addEventListener('click', () => oeffneBearbeitungsModal(index));
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'text-red-600 hover:text-red-800 focus:outline-none';
+      deleteBtn.setAttribute('aria-label', `Notiz "${note.title}" löschen`);
+      deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+      deleteBtn.addEventListener('click', () => loescheNotiz(index));
+
+      actionsDiv.append(editBtn, deleteBtn);
+      noteEl.append(titleEl, contentEl, actionsDiv);
+      return noteEl;
+    }
+
+    function zeigeNotizen() {
+      notesContainer.innerHTML = '';
+      if (notes.length === 0) {
+        const leerText = document.createElement('p');
+        leerText.className = 'text-center text-gray-500 col-span-full';
+        leerText.textContent = 'Noch keine Notizen. Klicke auf "Neue Notiz", um eine zu erstellen.';
+        notesContainer.appendChild(leerText);
+        return;
+      }
+
+      notes.forEach((note, index) => {
+        notesContainer.appendChild(erzeugeNotizElement(note, index));
+      });
+    }
+
+    function oeffneModal() {
+      noteModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      noteForm.noteTitle.focus();
+    }
+
+    function schliesseModal() {
+      noteModal.classList.add('hidden');
+      document.body.style.overflow = '';
+      noteForm.reset();
+      editingIndex = null;
+      document.getElementById('modalTitle').textContent = 'Neue Notiz';
+    }
+
+    function oeffneBearbeitungsModal(index) {
+      editingIndex = index;
+      const note = notes[index];
+      noteForm.noteTitle.value = note.title;
+      noteForm.noteContent.value = note.content;
+      document.getElementById('modalTitle').textContent = 'Notiz bearbeiten';
+      oeffneModal();
+    }
+
+    function loescheNotiz(index) {
+      if (confirm('Willst du diese Notiz wirklich löschen?')) {
+        notes.splice(index, 1);
+        speichern();
+        zeigeNotizen();
+      }
+    }
+
+    // Event-Listener
+    addNoteBtn.addEventListener('click', () => {
+      editingIndex = null;
+      document.getElementById('modalTitle').textContent = 'Neue Notiz';
+      noteForm.reset();
+      oeffneModal();
+    });
+
+    closeModalBtn.addEventListener('click', schliesseModal);
+    cancelBtn.addEventListener('click', schliesseModal);
+
+    noteForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const title = noteForm.noteTitle.value.trim();
+      const content = noteForm.noteContent.value.trim();
+      if (!title || !content) return;
+
+      if (editingIndex !== null) {
+        notes[editingIndex] = { title, content };
+      } else {
+        notes.push({ title, content });
+      }
+      speichern();
+      zeigeNotizen();
+      schliesseModal();
+    });
+
+    // Modal schließen bei "Escape"-Taste
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !noteModal.classList.contains('hidden')) {
+        schliesseModal();
+      }
+    });
+
+    // Notizen beim Laden anzeigen
+    zeigeNotizen();
+  </script>
+</body>
+
+</html>
